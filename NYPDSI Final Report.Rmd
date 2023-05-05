@@ -1,0 +1,235 @@
+---
+title: "NYPD Shooting Incident Analysis"
+output:
+  html_document:
+    toc: true
+    theme: united
+---
+
+|                                      |
+|--------------------------------------|
+| By: Katelyn Acquino Date: 05/02/2023 |
+
+# Introduction
+
+The purpose of this report is to present the findings of a data analysis conducted on the "NYPD Shooting Incident Historic" data set.
+
+# Background
+
+The data set is a breakdown of every shooting incident that occurred in NYC from the year 2006-2021. The data was collected from the data.cityofnewyork.us website.
+
+# Objective
+
+The objective of this analysis is to identify if there is an association between the perpetrator's race and the victims race, the location of the incidents, and the age range of the victims/perpetrators to develop an understanding of possible trends within these recorded shooting incidents. To achieve this objective, I will graph the data to get a visual of the results, then model the data using a Pearson's Chi-squared test.
+
+This information is being done in hopes it could be presented to the NY state government to spark intervention initiatives that could aid in the reduction of such incidents. The data is also being analyzed to uncover the potential racial disparities in the policing practices within NYC.
+
+# Methods
+
+The report has been organized as follows: first the data is read in using the url, then the csv is read. Next the data is tidied, by making a subset called NYPDSI_tidy, this is where only the data that I will be utilizing is presented. Next the results of the analysis are presented including visualizations and the statistical model. Lastly the findings are discussed.
+
+## Read in Data:
+
+-   *First library in tidyverse to use for tidying the data.*
+
+```{r}
+library(tidyverse)
+```
+
+-   *Url in the data*
+
+```{r}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+```
+
+-   *Import the dataset to your environment.*
+
+```{r}
+# Read in the data from the above url
+NYPDSI <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+```
+
+## Tidy the Data
+
+-   *First I will tidy the report to focus on the data that I need specifically for my study*
+
+```{R NYPDSI_tidy}
+# Select only the columns I want to use for my report
+library(dplyr)
+NYPDSI_tidy <- select(NYPDSI, BORO, LOCATION_DESC, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE)
+```
+
+```{r}
+#Now I will elimate rows with NA as their value (missing value)
+NYPDSI_tidy <- NYPDSI_tidy[complete.cases(NYPDSI_tidy$BORO, NYPDSI_tidy$LOCATION_DESC, NYPDSI_tidy$PERP_AGE_GROUP, NYPDSI_tidy$PERP_SEX, NYPDSI_tidy$PERP_RACE, NYPDSI_tidy$VIC_AGE_GROUP, NYPDSI_tidy$VIC_SEX, NYPDSI_tidy$VIC_RACE),]
+```
+
+```{r}
+#Eliminate rows with a value of "UNKNOWN"
+NYPDSI_tidy <- subset(NYPDSI_tidy, !apply(NYPDSI_tidy == "UNKNOWN",1,any))
+```
+
+## Visualize the Data
+
+-   *I decided to start by looking at the PERP_RACE to see what variables are most prevalent within this category*\
+
+```{r}
+# Only show rows with a value of specific race, not "null"
+NYPDSI_tidy <- NYPDSI_tidy[NYPDSI_tidy$PERP_RACE %in% c("AMERICAN_INDIAN/ALASKAN NATIVE", "ASIAN / PACIFIC ISLANDER", "BLACK", "WHITE", "WHITE HISPANIC", "BLACK HISPANIC"),]
+```
+
+```{r}
+#Group the data by Perpetrator Race
+Perp_race_values <- NYPDSI_tidy %>%
+  group_by(PERP_RACE) %>%
+  summarise(count = n())
+```
+
+```{r}
+#Calculate the percentages for each category
+Perp_race_values$percent <- round(Perp_race_values$count / 
+                                   sum(Perp_race_values$count) * 100, 1)
+```
+
+```{r}
+#Make a pie chart of perpetrator race
+ggplot(Perp_race_values, aes(x = "", y = count, fill = PERP_RACE)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +
+  labs(title = "Distribution of Perpetrator Races in NYPD Shooting Incidents Historic Data",
+       fill = "Perpetrator Race") +
+  geom_text(aes(label = paste0(percent, "%")), position = position_stack(vjust = 0.5))
+```
+
+This pie chart clearly shows that the dominance of perpetrators in this category are Black.
+
+-   *I want to look at the victim race column to see the distribution of race within this category*
+
+```{r}
+#Group the data by Victim Race
+Vic_race_values <- NYPDSI_tidy %>%
+  group_by(VIC_RACE) %>%
+  summarise(count = n())
+```
+
+```{r}
+#Calculate the percentages for each category
+Vic_race_values$percent <- round(Vic_race_values$count / 
+                                   sum(Vic_race_values$count) * 100, 1)
+```
+
+```{r}
+#Make a pie chart of perpetrator race
+ggplot(Vic_race_values, aes(x = "", y = count, fill = VIC_RACE)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +
+  labs(title = "Distribution of Victim Races in NYPD Shooting Incidents Historic Data",
+       fill = "Victim Race") +
+  geom_text(aes(label = paste0(percent, "%")), position = position_stack(vjust = 0.5))
+```
+
+This pie chart also clearly displays the dominating race as Black.
+
+-   *Make a stacked bar graph only using the columns PERP_RACE and VIC_RACE*
+
+```{r}
+# Load the ggplot2 package first
+library(ggplot2)
+```
+
+```{r}
+# create a contingency table of PERP_RACE and VIC_RACE
+table <- table(NYPDSI_tidy$PERP_RACE, NYPDSI_tidy$VIC_RACE)
+```
+
+```{r}
+# Convert the table to a data frame
+df <- as.data.frame.table(table)
+```
+
+```{r}
+# Create the stacked bar graph 
+ggplot(df,aes(x = Var1, y = Freq, fill = Var2)) + geom_bar(stat = "identity") + 
+  labs(title = "Comparison of Perpetrator Race to Victim Race", fill = "Perpetrator Race", "Victim Race") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+-   *Next I created a bar graph comparing Perpetrator Race to the Borough the incident took place*
+
+```{r}
+# create another contingency table
+table <- table(NYPDSI_tidy$PERP_RACE, NYPDSI_tidy$BORO)
+```
+
+```{r}
+# Convert the table to a data frame
+df <- as.data.frame.table(table)
+```
+
+```{r}
+# Create a stacked bar plot of variables
+ggplot(df,aes(x = Var1, y = Freq, fill = Var2)) + geom_bar(stat = "identity") +
+  labs(title = "Comparison of Perpetrator Race to Borough", fill = "Perpetrator Race", "Borough") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+-   *I also created a bar graph comparing Perpetrator Age Range by to the Victim Age Range*
+
+```{r}
+# Contingency table
+
+table <- table(NYPDSI_tidy$PERP_AGE_GROUP, NYPDSI_tidy$VIC_AGE_GROUP)
+```
+
+```{r}
+df <- as.data.frame.table(table)
+```
+
+```{r}
+ggplot(df,aes(x = Var1, y = Freq, fill = Var2)) + geom_bar(stat = "identity") +
+  labs(title = "Age Range of Perpetrator to Age Range of Victim")
+```
+
+-   *Lastly I created a heatmap to further visualize the association between these categorical values*
+
+```{r}
+# Group data to make a heat map comparing the two variables Perp_Race and Vic_Race
+grouped_data <- NYPDSI_tidy %>%
+    group_by(VIC_RACE, PERP_RACE) %>%
+    summarise(count = n())
+```
+
+```{r}
+#Create Heatmap
+ggplot(grouped_data, aes(x = PERP_RACE, y = VIC_RACE, fill = count)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Relationship btwn. Victim Race/Perpetrator Race",
+       x = "Perpetrator Race",
+       y = "Victim Race",
+       fill = "Count") +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Model the Data
+
+-   *I decided to use the Pearson's Chi-Squared test to determine whether there is a significant association between the Victim's race and the Perpetrator's race*\
+
+```{r}
+# now testing association between perp race and victim race
+table <- table(NYPDSI_tidy$VIC_RACE, NYPDSI_tidy$PERP_RACE)
+```
+
+```{r}
+chisq.test(table)
+```
+
+The Chi-Squared test results determined a clear statistical association between perpetrator race and vicitm race. 
+
+# Conclusion
+
+In conclusion, my analysis of the NYPD Shooting Incident Historic data exposed several key findings. First, the shooting reports were disproportionately involving black perpetrators and black victims. The second finding within this analysis was the borough with the most incidents reported was Brooklyn. The third key finding was the association of perpetrators within the 18-24 age range and victims in the 18-24 age range.  
+
+These results suggest that there is a clear and evident need to find the root causes of gun violence within the black community.  These results should also be used to promote more equitable policing practices within NYC, and to develop more effective strategies for preventing these incidents. NYC could begin an intervention plan with middle and high school students to intercept these young individuals at an impressionable age to promote conflict resolution practices. This in turn could lead to a stronger community with less gun violence.  These findings also suggest that there is a need for additional equality training within this specific police force.  
+
+\`\`\`
